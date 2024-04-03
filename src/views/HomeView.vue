@@ -24,7 +24,7 @@
     <van-dialog v-model:show="dataModalShow" title="数据设置" :show-cancel-button="false">
       <van-form ref="formRef">
         <van-cell-group inset>
-          <van-field v-model="loopDataValue" name="loopDataValue" label="排班顺序" placeholder="早|中|夜..."
+          <van-field v-model="loopDataValue" name="loopDataValue" label="排班顺序" placeholder="早、中、夜..."
             :rules="[{ required: true, message: '请填写排班顺序' }]" />
           <van-field :rules="[{ required: true, message: '请选择当天排班' }]" v-model="todayWorkType.loopValue" is-link readonly name="picker" label="今天班次" placeholder="选择今天是什么班？"
             @click="showPicker = true" />
@@ -57,7 +57,7 @@ const isLoading = ref(true)
 
 const radioOptions = computed(() => {
   if (loopDataValue.value) {
-    return loopDataValue.value.split('|').map((item, index) => ({ text: item, value: index + 1 }))
+    return loopDataValue.value.split('、').map((item, index) => ({ text: item, value: index + 1 }))
   } else {
     return []
   }
@@ -93,7 +93,7 @@ const showDateTip = (date) => {
   const workLoopData = localStorage.getItem('workLoopData')
   let label = ''
   if (todayWorkType.loopValue && workLoopData) {
-    const loopList = workLoopData.split('|')
+    const loopList = workLoopData.split('、')
     const theDate = dayjs(new Date(date.year, date.month, date.day)).format('YYYY-MM-DD')
     const theIndex = calcLoopIndexByDate(todayWorkType.date, theDate, todayWorkType.loopValue)
     label = loopList[theIndex - 1] || ''
@@ -105,7 +105,7 @@ const showDateTip = (date) => {
 const calcLoopIndexByDate = (oldDate, newDate, oldIndex) => {
   const workLoopData = localStorage.getItem('workLoopData')
   let dayDiffNum = dayjs(newDate).diff(dayjs(oldDate), 'day')
-  const loopLen = workLoopData.split('|').length
+  const loopLen = workLoopData.split('、').length
   if (dayDiffNum < 0) {
     dayDiffNum = dayDiffNum % loopLen  + loopLen
   } else {
