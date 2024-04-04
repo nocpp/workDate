@@ -12,7 +12,7 @@
     <div class="calendar-container" v-if="!isLoading">
       <vue-hash-calendar :disabled-week-view="true" picker-type="date">
         <template v-slot:day="scope">
-          <div class="lunar-content">
+          <div class="lunar-content" :class="{'release-day': showDateTip(scope?.date).indexOf('休') !== -1}">
             <div>{{ scope?.date.day }}</div>
             <div class="lunar-txt">{{ showDateTip(scope?.date) }}</div>
           </div>
@@ -94,9 +94,15 @@ const showDateTip = (date) => {
   let label = ''
   if (todayWorkType.loopValue && workLoopData) {
     const loopList = workLoopData.split('、')
-    const theDate = dayjs(new Date(date.year, date.month, date.day)).format('YYYY-MM-DD')
+
+    const theDayObj = dayjs(new Date(date.year, date.month, date.day))
+    const theDate = theDayObj.format('YYYY-MM-DD')
     const theIndex = calcLoopIndexByDate(todayWorkType.date, theDate, todayWorkType.loopValue)
     label = loopList[theIndex - 1] || ''
+
+    if (label === '休' && theDayObj.day() === 5) {
+      label = '早*'
+    }
   }
 
   return label
@@ -182,6 +188,13 @@ onMounted(() => {
       .lunar-content {
         font-size: 14px;
         text-align: center;
+      }
+
+      .release-day {
+        width: 100%;
+        border: 1px solid #9f76f6;
+        // color: #fff;
+        border-radius: 6px;
       }
 
       .lunar-txt {
