@@ -149,12 +149,23 @@ const calcLoopIndexByDate = (oldDate, newDate, oldIndex) => {
   let dayDiffNum = dayjs(newDate).diff(dayjs(oldDate), 'day')
   const loopLen = workLoopData.split('、').length
 
-  dayDiffNum = dayDiffNum % loopLen
+  dayDiffNum = dayDiffNum % loopLen // +、-、0
 
-  if (Number(oldIndex) + dayDiffNum > loopLen) {
-    return (Number(oldIndex) + dayDiffNum) % loopLen
+  oldIndex = Number(oldIndex)
+  if (dayDiffNum > 0) {
+    return (oldIndex + dayDiffNum) % loopLen
+  } else if (dayDiffNum < 0) {
+    const tempIndex = dayDiffNum + oldIndex
+
+    if (tempIndex > 0) {
+      return tempIndex
+    } else if (tempIndex < 0) {
+      return tempIndex + loopLen
+    } else {
+      return loopLen
+    }
   } else {
-    return Number(oldIndex) + dayDiffNum
+    return oldIndex
   }
 }
 
