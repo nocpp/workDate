@@ -12,9 +12,10 @@
     <div class="calendar-container" v-if="!isLoading">
       <vue-hash-calendar :disabled-week-view="true" picker-type="date">
         <template v-slot:day="scope">
-          <div class="lunar-content" :class="{'release-day': showDateTip(scope?.date).indexOf('休') !== -1}">
+          <div @click="setDebounce(scope?.date)" class="lunar-content" :class="{'release-day': showDateTip(scope?.date).indexOf('休') !== -1}">
             <div>{{ scope?.date.day }}</div>
             <div class="lunar-txt">{{ showDateTip(scope?.date) }}</div>
+            <div v-if="isShowDebouceDay(scope?.date)" class="debounce-tips" flex="main:center cross:center">弹</div>
           </div>
         </template>
       </vue-hash-calendar>
@@ -44,6 +45,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
+import { showDialog } from 'vant'
 
 const loopDataValue = ref()
 const dataModalShow = ref(false)
@@ -54,6 +56,7 @@ const todayWorkType = reactive({
 const showPicker = ref(false)
 const formRef = ref()
 const isLoading = ref(true)
+const debounceWorkDays = ref({})
 
 const radioOptions = computed(() => {
   if (loopDataValue.value) {
@@ -62,6 +65,27 @@ const radioOptions = computed(() => {
     return []
   }
 })
+
+const setDebounce = (date) => {
+  const theDayObj = dayjs(new Date(date.year, date.month, date.day))
+  const theDate = theDayObj.format('YYYY-MM-DD')
+  const isDebouceDay = debounceWorkDays.value[theDate]
+
+  showDialog({
+    title: '提示',
+    message: !isDebouceDay ? `是否设置${theDate}为弹班？` : `是否取消设置${theDate}为弹班？`
+  }).then(() => {
+    if (isDebouceDay) {
+      debounceWorkDays.value[theDate] = undefined
+    } else {
+      debounceWorkDays.value[theDate] = true
+    }
+
+    try {
+      localStorage.setItem('debounceWorkDays', JSON.stringify(debounceWorkDays.value))
+    } catch (error) { }
+  })
+}
 
 const changeData = async () => {
   try {
@@ -89,6 +113,17 @@ const onConfirm = (val) => {
   showPicker.value = false
 }
 
+const isShowDebouceDay = (date) => {
+  if (date) {
+    const theDayObj = dayjs(new Date(date.year, date.month, date.day))
+    const theDate = theDayObj.format('YYYY-MM-DD')
+
+    return debounceWorkDays.value[theDate]
+  } else {
+    return ''
+  }
+}
+
 const showDateTip = (date) => {
   const workLoopData = localStorage.getItem('workLoopData')
   let label = ''
@@ -97,6 +132,7 @@ const showDateTip = (date) => {
 
     const theDayObj = dayjs(new Date(date.year, date.month, date.day))
     const theDate = theDayObj.format('YYYY-MM-DD')
+
     const theIndex = calcLoopIndexByDate(todayWorkType.date, theDate, todayWorkType.loopValue)
     label = loopList[theIndex - 1] || ''
 
@@ -112,11 +148,8 @@ const calcLoopIndexByDate = (oldDate, newDate, oldIndex) => {
   const workLoopData = localStorage.getItem('workLoopData')
   let dayDiffNum = dayjs(newDate).diff(dayjs(oldDate), 'day')
   const loopLen = workLoopData.split('、').length
-  if (dayDiffNum < 0) {
-    dayDiffNum = dayDiffNum % loopLen  + loopLen
-  } else {
-    dayDiffNum = dayDiffNum % loopLen
-  }
+
+  dayDiffNum = dayDiffNum % loopLen
 
   if (Number(oldIndex) + dayDiffNum > loopLen) {
     return (Number(oldIndex) + dayDiffNum) % loopLen
@@ -128,6 +161,7 @@ const calcLoopIndexByDate = (oldDate, newDate, oldIndex) => {
 onMounted(() => {
   const workLoopData = localStorage.getItem('workLoopData')
   let workNowData = localStorage.getItem('workNowData')
+  let debounceWorkDaysFromStorage = localStorage.getItem('debounceWorkDays')
   isLoading.value = true
 
   if (workLoopData && workNowData) {
@@ -144,6 +178,11 @@ onMounted(() => {
         date: todayWorkType.date,
         loopValue: todayWorkType.loopValue
       }))
+
+      if (debounceWorkDaysFromStorage) {
+        debounceWorkDaysFromStorage = JSON.parse(debounceWorkDaysFromStorage)
+        debounceWorkDays.value = debounceWorkDaysFromStorage || {}
+      }
     } catch (error) { console.log('qxdlog: ', error) } finally {
       isLoading.value = false
     }
@@ -161,6 +200,8 @@ onMounted(() => {
 
 <style lang="less" scoped>
 .main-app-container {
+  max-width: 500px;
+  margin: 0 auto;
   .work-loop-setting {
     border-bottom: 1px solid #eee;
   }
@@ -186,14 +227,26 @@ onMounted(() => {
       }
 
       .lunar-content {
+        width: 100%;
+        position: relative;
         font-size: 14px;
         text-align: center;
+
+        .debounce-tips {
+          position: absolute;
+          right: -10px;
+          top: -2px;
+          font-size: 12px;
+          color: #fff;
+          background-color: rgb(245, 38, 38);
+          border-radius: 50%;
+          width: 16px;
+          height: 16px;
+        }
       }
 
       .release-day {
-        width: 100%;
         border: 1px solid #9f76f6;
-        // color: #fff;
         border-radius: 6px;
       }
 
