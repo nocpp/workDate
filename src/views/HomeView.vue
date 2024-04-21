@@ -1,6 +1,11 @@
 <template>
   <div class="main-app-container">
     <van-nav-bar title="排班日历" />
+    <div class="cache-switch" flex="cross:center">
+      <span class="switch-label">联网开关：</span>
+      <van-switch :size="16" @change="handleSwitchChange" v-model="isOnlined">
+      </van-switch>
+    </div>
     <div class="work-loop-setting">
       <van-cell @click="dataModalShow = true" title="排班设置" is-link>
         <template #value>
@@ -58,6 +63,8 @@ const formRef = ref()
 const isLoading = ref(true)
 const debounceWorkDays = ref({})
 
+const isOnlined = ref(true)
+
 const radioOptions = computed(() => {
   if (loopDataValue.value) {
     return loopDataValue.value.split('、').map((item, index) => ({ text: item, value: index + 1 }))
@@ -73,7 +80,8 @@ const setDebounce = (date) => {
 
   showDialog({
     title: '提示',
-    message: !isDebouceDay ? `是否设置${theDate}为弹班？` : `是否取消设置${theDate}为弹班？`
+    message: !isDebouceDay ? `是否设置${theDate}为弹班？` : `是否取消设置${theDate}为弹班？`,
+    showCancelButton: true
   }).then(() => {
     if (isDebouceDay) {
       debounceWorkDays.value[theDate] = undefined
@@ -166,7 +174,15 @@ onMounted(() => {
   const workLoopData = localStorage.getItem('workLoopData')
   let workNowData = localStorage.getItem('workNowData')
   let debounceWorkDaysFromStorage = localStorage.getItem('debounceWorkDays')
+  let isOnlinedStorage = localStorage.getItem('isOnlinedStorage') || 'true'
   isLoading.value = true
+
+  if (isOnlinedStorage === 'true') {
+    isOnlined.value = true
+  } else {
+    isOnlined.value = false
+  }
+  setServiceWorker(isOnlined.value)
 
   if (workLoopData && workNowData) {
     try {
@@ -195,6 +211,40 @@ onMounted(() => {
   }
 })
 
+const handleSwitchChange = (val) => {
+  localStorage.setItem('isOnlinedStorage', val)
+  setServiceWorker(val)
+}
+
+const clearAllCache = () => {
+  if (window.caches) {
+    window.caches.keys().then(function(cacheNames) {
+      cacheNames.forEach(function(cacheName) {
+        window.caches.delete(cacheName);
+      });
+    });
+  }
+}
+
+const setServiceWorker = (newOnlineState) => {
+  if ('serviceWorker' in navigator) {
+    if (!newOnlineState) { // 离线状态
+      navigator.serviceWorker.register('/sw.js').then(function(registration) {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      }, function(err) {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+    } else {
+      clearAllCache()
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+  }
+}
+
 // watch(radioOptions, (newVal, oldVal) => {
 //   if (newVal.length !== oldVal.length) {
 //     todayWorkType.loopValue = undefined
@@ -204,8 +254,23 @@ onMounted(() => {
 
 <style lang="less" scoped>
 .main-app-container {
+  position: relative;
   max-width: 500px;
   margin: 0 auto;
+
+  .cache-switch {
+    position: absolute;
+    left: 16px;
+    top: 0;
+    height: 46px;
+    z-index: 999;
+
+    .switch-label {
+      color: #969799;
+      font-size: 14px;
+    }
+  }
+
   .work-loop-setting {
     border-bottom: 1px solid #eee;
   }
