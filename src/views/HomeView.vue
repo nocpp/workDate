@@ -13,14 +13,15 @@
             :type="item.value === +todayWorkType.loopValue ? 'primary' : 'default'">{{ item.text }}</van-tag>
         </template>
       </van-cell>
+      <van-cell @click="jumpDateShow = true" title="农历跳转" is-link></van-cell>
     </div>
     <div class="calendar-container" v-if="!isLoading">
-      <vue-hash-calendar :disabled-week-view="true" picker-type="date">
+      <vue-hash-calendar ref="calendarRef" :disabled-week-view="true" picker-type="date">
         <template v-slot:day="scope">
-          <div @click="setDebounce(scope?.date)" class="lunar-content" :class="{'release-day': showDateTip(scope?.date).indexOf('休') !== -1}">
+          <div @click="setDayDetailShow(scope?.date)" class="lunar-content" :class="{'release-day': showDateTip(scope?.date).indexOf('休') !== -1}">
             <div>{{ scope?.date.day }}</div>
             <div class="lunar-txt">{{ showDateTip(scope?.date) }}</div>
-            <div v-if="isShowDebouceDay(scope?.date)" class="debounce-tips" flex="main:center cross:center">弹</div>
+            <div v-if="isShowRemarkDay(scope?.date)" class="debounce-tips" flex="main:center cross:center">备</div>
           </div>
         </template>
       </vue-hash-calendar>
@@ -41,19 +42,57 @@
       </template>
     </van-dialog>
 
+    <van-dialog v-model:show="dayDetailModalShow" title="日期详情" :show-cancel-button="false">
+      <div>
+        <van-field label="阳历" colon :model-value="`${detailDayInfo.sloarDate}(${detailDayInfo.dayTips})`" readonly />
+        <van-field label="农历" colon :model-value="detailDayInfo.lunarDate" readonly />
+        <van-field
+          label="是否弹班"
+          readonly
+        >
+          <template #input>
+            <van-switch v-model="detailDayInfo.isDebouceDay" :size="`18px`" />
+          </template>
+        </van-field>
+        <van-field v-model="detailDayInfo.remark" rows="5" placeholder="请输入备注"label="备注信息" colon type="textarea" />
+      </div>
+      <template #footer>
+        <div style="padding-bottom: 20px;"flex="main:center">
+          <van-button style="margin-right: 20px;width: 80px;" @click="dayDetailModalShow = false">取消</van-button>
+          <van-button style="width: 80px;" :loading="saveLoading" @click="saveDayData" type="primary">保存</van-button>
+        </div>
+      </template>
+    </van-dialog>
+
     <van-popup v-model:show="showPicker" position="bottom">
       <van-picker :columns="radioOptions" @confirm="onConfirm" @cancel="showPicker = false" />
+    </van-popup>
+    <van-popup
+      v-model:show="jumpDateShow"
+      position="bottom"
+      :style="{ height: 'auto' }"
+    >
+      <van-date-picker
+        title="选择农历"
+        :min-date="minDate"
+        @confirm="handleJump"
+        @cancel="jumpDateShow = false"
+      />
     </van-popup>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { Solar, Lunar } from 'lunar-javascript'
 import dayjs from 'dayjs'
-import { showDialog } from 'vant'
+import localforage from 'localforage'
+import { showLoadingToast, showToast } from 'vant'
 
 const loopDataValue = ref()
 const dataModalShow = ref(false)
+const dayDetailModalShow = ref(false)
+const jumpDateShow = ref(false)
 const todayWorkType = reactive({
   date: dayjs().format('YYYY-MM-DD'),
   loopValue: undefined
@@ -62,8 +101,20 @@ const showPicker = ref(false)
 const formRef = ref()
 const isLoading = ref(true)
 const debounceWorkDays = ref({})
+const detailDayInfo = ref({
+  sloarDate: '',
+  lunarDate: '',
+  isDebouceDay: false,
+  remark: '',
+  dayTips: ''
+})
+const saveLoading = ref(false)
+const hasDataDate = ref([])
+const nowYear = dayjs().format('YYYY')
+const minDate = ref(new Date(`${nowYear}/01/01`))
 
 const isOnlined = ref(true)
+const calendarRef = ref(null)
 
 const radioOptions = computed(() => {
   if (loopDataValue.value) {
@@ -73,26 +124,41 @@ const radioOptions = computed(() => {
   }
 })
 
-const setDebounce = (date) => {
+const handleJump = ({ selectedValues }) => {
+  const sloarDateVal = Lunar.fromYmd(...selectedValues).getSolar().toString()
+  const sloarDateValList = sloarDateVal.split('-')
+  calendarRef.value.reset(new Date(sloarDateValList[0], Number(sloarDateValList[1]) - 1, sloarDateValList[2]))
+  jumpDateShow.value = false
+}
+
+const setDayDetailShow = async (date) => {
   const theDayObj = dayjs(new Date(date.year, date.month, date.day))
-  const theDate = theDayObj.format('YYYY-MM-DD')
-  const isDebouceDay = debounceWorkDays.value[theDate]
+  const curDetailDate = theDayObj.format('YYYY-MM-DD')
+  detailDayInfo.value = {
+    sloarDate: curDetailDate,
+    lunarDate: Solar.fromDate(new Date(date.year, date.month, date.day)).getLunar().toString()
+  }
+  dayDetailModalShow.value = true
+  saveLoading.value = true
+  const dateInfo = await localforage.getItem(curDetailDate)
+  if (dateInfo) {
+    const dateDataObj = JSON.parse(dateInfo)
+    detailDayInfo.value = dateDataObj
+  }
+  detailDayInfo.value.dayTips = showDateTip(date)
+  saveLoading.value = false
+}
 
-  showDialog({
-    title: '提示',
-    message: !isDebouceDay ? `是否设置${theDate}为弹班？` : `是否取消设置${theDate}为弹班？`,
-    showCancelButton: true
-  }).then(() => {
-    if (isDebouceDay) {
-      debounceWorkDays.value[theDate] = undefined
-    } else {
-      debounceWorkDays.value[theDate] = true
-    }
-
-    try {
-      localStorage.setItem('debounceWorkDays', JSON.stringify(debounceWorkDays.value))
-    } catch (error) { }
-  })
+const saveDayData = async () => {
+  saveLoading.value = true
+  try {
+    await localforage.setItem(detailDayInfo.value.sloarDate, JSON.stringify(detailDayInfo.value))
+    dayDetailModalShow.value = false
+    showToast('保存成功')
+    getAllKey()
+  } catch (error) { } finally {
+    saveLoading.value = false
+  }
 }
 
 const changeData = async () => {
@@ -121,12 +187,12 @@ const onConfirm = (val) => {
   showPicker.value = false
 }
 
-const isShowDebouceDay = (date) => {
+const isShowRemarkDay = (date) => {
   if (date) {
     const theDayObj = dayjs(new Date(date.year, date.month, date.day))
     const theDate = theDayObj.format('YYYY-MM-DD')
 
-    return debounceWorkDays.value[theDate]
+    return hasDataDate.value.includes(theDate)
   } else {
     return ''
   }
@@ -170,7 +236,14 @@ const calcLoopIndexByDate = (oldDate, newDate, oldIndex) => {
   }
 }
 
+const getAllKey = async () => {
+  const keys = await localforage.keys()
+  hasDataDate.value = keys
+}
+
 onMounted(() => {
+  initDB()
+  getAllKey()
   const workLoopData = localStorage.getItem('workLoopData')
   let workNowData = localStorage.getItem('workNowData')
   let debounceWorkDaysFromStorage = localStorage.getItem('debounceWorkDays')
@@ -210,6 +283,16 @@ onMounted(() => {
     isLoading.value = false
   }
 })
+
+const initDB = () => {
+  localforage.config({
+    driver      : localforage.INDEXEDDB, // Force WebSQL; same as using setDriver()
+    name        : 'workDate',
+    version     : 1.0,
+    storeName   : 'dateData', // Should be alphanumeric, with underscores.
+    description : 'some data about date'
+  });
+}
 
 const handleSwitchChange = (val) => {
   localStorage.setItem('isOnlinedStorage', val)
