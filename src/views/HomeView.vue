@@ -210,9 +210,9 @@ const showDateTip = (date) => {
     const theIndex = calcLoopIndexByDate(todayWorkType.date, theDate, todayWorkType.loopValue)
     label = loopList[theIndex - 1] || ''
 
-    if (label === '休' && theDayObj.day() === 5) {
-      label = '早*'
-    }
+    // if (label === '休' && theDayObj.day() === 5) {
+    //   label = '早*'
+    // }
   }
 
   return label
